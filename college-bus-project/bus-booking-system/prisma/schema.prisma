@@ -1,0 +1,178 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  role          String    @default("PASSENGER") 
+  phone         String?
+  city          String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  bookings      Booking[]
+  drivenTrips   Trip[]    @relation("DriverTrips")
+  auditLogs     AuditLog[]
+}
+
+model Bus {
+  id             String    @id @default(cuid())
+  registrationNo String    @unique
+  busNumber      String    @unique
+  operatorName   String
+  type           String    
+  capacity       Int
+  amenities      String    
+  isActive       Boolean   @default(true)
+  
+  trips          Trip[]
+  seats          Seat[]
+}
+
+model Seat {
+  id        String   @id @default(cuid())
+  busId     String
+  bus       Bus      @relation(fields: [busId], references: [id])
+  seatNo    String
+  type      String   @default("STANDARD") 
+  
+  reservations SeatReservation[]
+  @@unique([busId, seatNo])
+}
+
+model Route {
+  id               String   @id @default(cuid())
+  source           String
+  destination      String
+  distanceKm       Float
+  estimatedMins    Int
+  isActive         Boolean  @default(true)
+  
+  stops            RouteStop[]
+  trips            Trip[]
+}
+
+model RouteStop {
+  id             String   @id @default(cuid())
+  routeId        String
+  route          Route    @relation(fields: [routeId], references: [id])
+  stopName       String
+  stopOrder      Int
+  minsFromSource Int
+  
+  @@unique([routeId, stopOrder])
+}
+
+model Trip {
+  id            String     @id @default(cuid())
+  routeId       String
+  route         Route      @relation(fields: [routeId], references: [id])
+  busId         String
+  bus           Bus        @relation(fields: [busId], references: [id])
+  driverId      String
+  driver        User       @relation("DriverTrips", fields: [driverId], references: [id])
+  
+  departureTime DateTime
+  arrivalTime   DateTime
+  status        String     @default("SCHEDULED")
+  baseFare      Float
+  
+  bookings      Booking[]
+  tracking      TrackingUpdate[]
+}
+
+model Booking {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  tripId        String
+  trip          Trip     @relation(fields: [tripId], references: [id])
+  
+  pnr           String   @unique
+  totalFare     Float
+  status        String   
+  createdAt     DateTime @default(now())
+
+  reservations  SeatReservation[]
+  payment       Payment?
+  refund        Refund?
+}
+
+model SeatReservation {
+  id            String   @id @default(cuid())
+  bookingId     String?
+  booking       Booking? @relation(fields: [bookingId], references: [id])
+  seatId        String
+  seat          Seat     @relation(fields: [seatId], references: [id])
+  tripId        String   
+  
+  status        String   
+  lockExpiresAt DateTime? 
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id])
+  amount        Float
+  method        String
+  status        String
+  transactionId String   @unique
+  createdAt     DateTime @default(now())
+}
+
+model Refund {
+  id            String   @id @default(cuid())
+  bookingId     String   @unique
+  booking       Booking  @relation(fields: [bookingId], references: [id])
+  amount        Float
+  status        String   
+  createdAt     DateTime @default(now())
+}
+
+model TrackingUpdate {
+  id          String   @id @default(cuid())
+  tripId      String
+  trip        Trip     @relation(fields: [tripId], references: [id])
+  latitude    Float
+  longitude   Float
+  currentStop String?
+  timestamp   DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  action      String
+  entity      String
+  entityId    String
+  details     String
+  timestamp   DateTime @default(now())
+}
+
+model PaymentVerification {
+  id               String   @id @default(cuid())
+  bookingReference String   @unique
+  paymentReference String   @unique
+  pnr              String   @unique
+  utr              String?  @unique
+  passengerName    String
+  phone            String?
+  email            String?
+  vehicleId        String
+  route            String
+  seats            String
+  amount           Float
+  method           String   @default("UPI_MANUAL")
+  status           String   @default("PAYMENT_CONFIRMED_BY_USER")
+  verifiedAt       DateTime @default(now())
+}
