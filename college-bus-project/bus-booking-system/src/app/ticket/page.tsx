@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import {
+  AlertCircle,
   BusFront,
   QrCode,
   Download,
@@ -33,33 +34,32 @@ type Booking = {
   paidWith: string;
 };
 
-const FALLBACK_BOOKING: Booking = {
-  pnr: "OMNI882910",
-  status: "CONFIRMED",
-  route: "Patiala -> Chandigarh",
-  date: "03 Sep 2026",
-  departure: "06:00 AM",
-  arrival: "08:15 AM",
-  bus: "OmniBus Elite",
-  seats: "1C, 1D, 2C, 2D",
-  passenger: "Girikshit",
-  amount: 2100,
-  paidWith: "UPI",
-  paymentStatus: "DEMO BOOKING - NO CHARGE",
-};
-
 export default function TicketPage() {
   const router = useRouter();
-  const [booking, setBooking] = useState<Booking>(FALLBACK_BOOKING);
+  const [booking, setBooking] = useState<Booking | null>(null);
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
       const savedBooking = localStorage.getItem("latestBooking");
-      if (savedBooking) setBooking(JSON.parse(savedBooking));
+      if (!savedBooking) {
+        router.replace("/search");
+        return;
+      }
+      try {
+        setBooking(JSON.parse(savedBooking) as Booking);
+      } catch {
+        router.replace("/search");
+      }
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
-  }, []);
+  }, [router]);
 
+  if (!booking) {
+    return <main className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4 font-sans text-slate-600"><p>Loading your booking…</p></main>;
+  }
+
+  const isPaymentPending = booking.status === "PAYMENT_PENDING";
+  const isLocalPayment = booking.paymentReference?.startsWith("LOCAL-") === true;
   const [from, to] = booking.route.split(" -> ");
   return (
     <main className="min-h-screen bg-[#f5f5f5] px-4 py-8 font-sans text-slate-900">
@@ -80,24 +80,21 @@ export default function TicketPage() {
           </button>
         </header>
         <div className="mb-6 flex items-center gap-3">
-          <CheckCircle2
+          {isPaymentPending ? <AlertCircle
             size={28}
-            className={
-              booking.status === "PAYMENT_PENDING"
-                ? "text-amber-600"
-                : "text-green-600"
-            }
-          />
+            className="text-amber-600"
+          /> : <CheckCircle2
+            size={28}
+            className="text-green-600"
+          />}
           <div>
             <p
-              className={`text-xs font-bold uppercase tracking-wider ${booking.status === "PAYMENT_PENDING" ? "text-amber-600" : "text-green-600"}`}
+              className={`text-xs font-bold uppercase tracking-wider ${isPaymentPending ? "text-amber-600" : "text-green-600"}`}
             >
               {booking.paymentStatus || "Payment received"}
             </p>
             <h1 className="text-2xl font-bold">
-              {booking.status === "PAYMENT_PENDING"
-                ? "Booking payment pending"
-                : "Booking confirmed"}
+              {isPaymentPending ? "Booking payment pending" : "Ticket booked successfully"}
             </h1>
           </div>
         </div>
@@ -166,46 +163,39 @@ export default function TicketPage() {
                   <p className="text-sm text-slate-500">{booking.bus}</p>
                 </div>
               </div>
-              <div className="rounded-xl border border-green-200 bg-green-50 p-4">
+              <div className={`rounded-xl border p-4 ${isPaymentPending ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-green-700">
+                    <p className={`text-xs font-bold uppercase tracking-wider ${isPaymentPending ? "text-amber-700" : "text-green-700"}`}>
                       Booking reference
                     </p>
-                    <p className="mt-1 font-mono font-extrabold text-green-900">
+                    <p className={`mt-1 font-mono font-extrabold ${isPaymentPending ? "text-amber-900" : "text-green-900"}`}>
                       {booking.bookingReference || booking.pnr}
                     </p>
                   </div>
-                  <span className="border border-green-200 bg-white px-3 py-1 text-xs font-bold text-green-700">
-                    DEMO
-                  </span>
+                  {isLocalPayment && <p className="rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs font-semibold text-blue-800">This booking was confirmed locally. No money was charged.</p>}
                 </div>
-                <div className="mt-3 border-t border-green-200 pt-3">
-                  <p className="text-xs font-bold uppercase tracking-wider text-green-700">
-                    Prototype booking
+                <div className={`mt-3 border-t pt-3 ${isPaymentPending ? "border-amber-200" : "border-green-200"}`}>
+                  <p className={`text-xs font-bold uppercase tracking-wider ${isPaymentPending ? "text-amber-700" : "text-green-700"}`}>
+                    {booking.paymentStatus || "Payment received"}
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-green-900">
-                    No payment was collected.
-                  </p>
+                  {booking.paymentReference && <p className="mt-1 text-xs text-slate-500">Payment reference: {booking.paymentReference}</p>}
                 </div>
               </div>
               <div className="flex justify-between border-t border-slate-100 pt-4 text-sm">
                 <span className="text-slate-500">
-                  Demo method: {booking.paidWith}
+                  {isPaymentPending ? "Selected method" : "Paid with"}: {booking.paidWith}
                 </span>
                 <span className="font-extrabold">
-                  Demo total ₹{booking.amount}
+                  {isPaymentPending ? "Amount due" : "Total"} ₹{booking.amount}
                 </span>
               </div>
             </div>
             <div className="flex flex-col items-center justify-center border-t-2 border-dashed border-slate-200 pt-6 md:border-l-2 md:border-t-0 md:pl-8 md:pt-0">
-              <QrCode size={128} className="text-slate-800" />
-              <p className="mt-2 text-xs font-semibold text-slate-400">
-                Scan for boarding
+              {isPaymentPending ? <AlertCircle size={96} className="text-amber-300" /> : <QrCode size={128} className="text-slate-800" />}
+              <p className="mt-2 text-center text-xs font-semibold text-slate-400">
+                {isPaymentPending ? "Boarding pass is issued after payment" : "Scan for boarding"}
               </p>
-              <span className="mt-3 border border-green-200 bg-green-50 px-4 py-1 text-sm font-bold text-green-700">
-                DEMO
-              </span>
             </div>
           </div>
         </section>

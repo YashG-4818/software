@@ -23,6 +23,7 @@ export default function Home() {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [focusedField, setFocusedField] = useState<'from' | 'to' | null>(null);
+  const [searchError, setSearchError] = useState('');
   const [recentSearches, setRecentSearches] = useState<{ from: string; to: string }[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -36,11 +37,25 @@ export default function Home() {
 
   const search = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!from || !to || from.toLowerCase() === to.toLowerCase()) return;
-    const next = [{ from, to }, ...recentSearches.filter((item) => item.from !== from || item.to !== to)].slice(0, 3);
+    const origin = from.trim();
+    const destination = to.trim();
+    if (!origin || !destination) {
+      setSearchError('Choose both an origin and a destination.');
+      return;
+    }
+    if (origin.toLowerCase() === destination.toLowerCase()) {
+      setSearchError('Choose two different cities.');
+      return;
+    }
+    setSearchError('');
+    const next = [{ from: origin, to: destination }, ...recentSearches.filter((item) => item.from !== origin || item.to !== destination)].slice(0, 3);
     setRecentSearches(next);
-    localStorage.setItem('recentSearches', JSON.stringify(next));
-    router.push(`/search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${date}`);
+    try {
+      localStorage.setItem('recentSearches', JSON.stringify(next));
+    } catch (storageError) {
+      console.warn('Recent searches could not be saved.', storageError);
+    }
+    router.push(`/search?from=${encodeURIComponent(origin)}&to=${encodeURIComponent(destination)}&date=${date}`);
   };
 
   const filteredCities = (value: string) => cities.filter((city) => city.toLowerCase().includes(value.toLowerCase()));
@@ -59,16 +74,18 @@ export default function Home() {
       <header className="border-b border-slate-800 bg-[#111a2b]">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8">
           <button type="button" onClick={() => router.push('/')} className="flex items-center gap-2 text-[#ff5a63]"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#d9232e] text-white"><BusFront size={21} /></span><span className="text-xl font-extrabold tracking-tight text-white">OmniBus</span></button>
-          <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-300 md:flex"><a href="#offers" className="hover:text-[#ff7a80]">Offers</a><a href="/track" className="hover:text-[#ff7a80]">Track ticket</a><button type="button" onClick={() => setSupportOpen(true)} className="flex items-center gap-2 hover:text-[#ff7a80]"><Headphones size={16} /> Help</button></nav>
+          <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-300 md:flex"><a href="#offers" className="hover:text-[#ff7a80]">Offers</a><a href="/track" className="hover:text-[#ff7a80]">Track ticket</a><a href="/search" className="hover:text-[#ff7a80]">Passenger</a><a href="/driver/dashboard?demo=true" className="hover:text-[#ff7a80]">Driver</a><a href="/admin?demo=true" className="hover:text-[#ff7a80]">Admin</a><button type="button" onClick={() => setSupportOpen(true)} className="flex items-center gap-2 hover:text-[#ff7a80]"><Headphones size={16} /> Help</button></nav>
           <div className="flex items-center gap-2 text-sm font-bold"><a href="/login" className="hidden rounded-lg px-3 py-2 text-slate-300 hover:bg-slate-800 sm:block">Login</a><AccountMenu role="Passenger" dark /></div>
         </div>
       </header>
 
       <section className="hero-grid border-b border-[#b91c27] bg-[#b91c27] px-5 pb-28 pt-14 text-white lg:px-8"><div className="mx-auto max-w-7xl"><p className="text-sm font-bold uppercase tracking-[0.18em] text-red-100">Travel made simple</p><h1 className="mt-3 max-w-2xl text-4xl font-extrabold tracking-tight sm:text-5xl">Every journey starts with a better bus.</h1><p className="mt-4 max-w-xl text-base text-red-50">Compare trusted operators, choose your seat, and keep your trip updates in one place.</p>
         <form onSubmit={search} className="relative z-30 mt-10 grid gap-2 rounded-2xl border border-slate-700 bg-[#111a2b] p-2 text-slate-100 shadow-2xl shadow-black/30 md:grid-cols-[1fr_auto_1fr_1fr_auto] md:items-center"><LocationField label="From" value={from} onChange={setFrom} open={focusedField === 'from'} onFocus={() => { setFocusedField('from'); setCalendarOpen(false); }} options={filteredCities(from)} recentSearches={recentSearches} onRecentSelect={(item) => { setFrom(item.from); setTo(item.to); setFocusedField(null); }} onSelect={(city) => { setFrom(city); setFocusedField(null); }} /><button type="button" onClick={() => { setFrom(to); setTo(from); }} aria-label="Swap cities" className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-slate-600 bg-[#18243a] text-[#ff6670] shadow-sm hover:border-[#ff6670] hover:bg-[#243452]"><ArrowRightLeft size={16} /></button><LocationField label="To" value={to} onChange={setTo} open={focusedField === 'to'} onFocus={() => { setFocusedField('to'); setCalendarOpen(false); }} options={filteredCities(to)} recentSearches={recentSearches} onRecentSelect={(item) => { setFrom(item.from); setTo(item.to); setFocusedField(null); }} onSelect={(city) => { setTo(city); setFocusedField(null); }} /><div className="relative"><button type="button" onClick={() => { setCalendarOpen((open) => !open); setFocusedField(null); }} className="flex h-16 w-full items-center gap-3 border-t border-slate-700 px-4 text-left hover:bg-[#18243a] md:border-l md:border-t-0"><CalendarDays size={20} className="text-slate-400" /><span className="flex min-w-0 flex-1 flex-col"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Date of journey</span><span className={`mt-1 text-sm font-bold ${selectedDate ? 'text-white' : 'text-slate-400'}`}>{displayDate}</span></span></button>{calendarOpen && <CalendarPicker today={today} maxDate={maxDate} calendarMonth={calendarMonth} setCalendarMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={(value) => { setDate(formatDate(value)); setCalendarOpen(false); }} daysInMonth={daysInMonth} firstDayOfMonth={firstDayOfMonth} />}</div><button type="submit" className="flex h-14 items-center justify-center gap-2 rounded-xl bg-[#e73543] px-7 font-extrabold text-white shadow-lg shadow-red-950/40 hover:bg-[#ff4d59]"><Search size={19} /> Search buses</button></form>
+        {searchError && <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-800">{searchError}</p>}
       </div></section>
 
       <div className="mx-auto -mt-12 max-w-7xl px-5 pb-16 lg:px-8"><section className="grid gap-3 rounded-2xl border border-slate-700 bg-[#111a2b] p-4 shadow-lg shadow-black/25 sm:grid-cols-3"><Trust icon={<ShieldCheck />} title="Safe and reliable" detail="Verified operators and transparent fares" /><Trust icon={<Ticket />} title="Easy cancellation" detail="Flexible options when plans change" /><Trust icon={<Headphones />} title="24×7 support" detail="Help before, during, and after your trip" /></section>
+        <section className="mt-8" aria-labelledby="modules-heading"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-bold uppercase tracking-wider text-[#ff6670]">Quick access</p><h2 id="modules-heading" className="mt-1 text-2xl font-extrabold">Choose a module</h2></div><p className="text-xs font-semibold text-slate-400">Passenger, driver, and fleet tools in one place.</p></div><div className="mt-4 grid gap-3 sm:grid-cols-3"><ModuleCard href="/search" icon={<Ticket size={21} />} title="Passenger module" detail="Browse buses and book a trip" /><ModuleCard href="/driver/dashboard?demo=true" icon={<BusFront size={21} />} title="Driver module" detail="Open the driver dashboard" /><ModuleCard href="/admin?demo=true" icon={<ShieldCheck size={21} />} title="Admin module" detail="Manage fleet and users" /></div></section>
         <section id="offers" className="mt-12"><div className="flex items-end justify-between"><div><p className="text-sm font-bold uppercase tracking-wider text-[#ff6670]">Deals for your next trip</p><h2 className="mt-1 text-2xl font-extrabold">Offers and benefits</h2></div><button type="button" onClick={() => setSupportOpen(true)} className="hidden text-sm font-bold text-[#ff7a80] sm:block">Need help booking? <ArrowRight size={15} className="inline" /></button></div><div className="mt-5 grid gap-4 md:grid-cols-3">{offers.map((offer) => <article key={offer.code} className={`${offer.tone} relative overflow-hidden rounded-2xl border border-slate-700 p-5`}><div className="absolute -right-6 -top-8 h-24 w-24 rounded-full border-[14px] border-white/10" /><p className="font-mono text-xs font-extrabold tracking-wider text-slate-400">{offer.code}</p><h3 className="mt-5 max-w-[220px] text-lg font-extrabold text-white">{offer.title}</h3><p className="mt-2 text-sm text-slate-300">{offer.detail}</p><button type="button" onClick={() => navigator.clipboard?.writeText(offer.code)} className="mt-5 rounded-lg border border-slate-600 bg-[#111a2b] px-3 py-2 text-xs font-extrabold text-slate-100 hover:border-[#ff6670] hover:text-white">Copy code</button></article>)}</div></section>
         <section className="mt-14"><p className="text-sm font-bold uppercase tracking-wider text-[#ff6670]">Popular routes</p><h2 className="mt-1 text-2xl font-extrabold">Where are you heading?</h2><div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[['Patiala', 'Chandigarh'], ['Delhi', 'Manali'], ['Chandigarh', 'Shimla'], ['Rajpura', 'Amritsar']].map(([origin, destination]) => <button key={`${origin}-${destination}`} type="button" onClick={() => { setFrom(origin); setTo(destination); window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex items-center justify-between rounded-xl border border-slate-700 bg-[#111a2b] p-4 text-left shadow-sm hover:-translate-y-0.5 hover:border-[#ff6670] hover:bg-[#18243a]"><span><span className="block text-xs font-bold uppercase tracking-wider text-slate-400">Popular route</span><span className="mt-1 block font-extrabold">{origin} <ArrowRight size={14} className="mx-1 inline text-[#ff6670]" /> {destination}</span></span><ChevronDown size={17} className="-rotate-90 text-slate-400" /></button>)}</div></section>
         <section className="mt-14 flex flex-col justify-between gap-6 rounded-2xl bg-[#172033] p-7 text-white sm:flex-row sm:items-center"><div><p className="text-sm font-bold text-red-300">Your trip, in your hands</p><h2 className="mt-1 text-2xl font-extrabold">Book, track, and manage every ticket.</h2><p className="mt-2 max-w-xl text-sm text-slate-300">Your passenger dashboard keeps tickets, live status, and support in one calm place.</p></div><a href="/track" className="btn-pill shrink-0 bg-white px-5 py-3 text-sm font-extrabold text-[#172033]">Track a ticket <ArrowRight size={17} /></a></section>
@@ -94,4 +111,8 @@ function LocationField({ label, value, onChange, open, onFocus, options, recentS
 
 function Trust({ icon, title, detail }: { icon: React.ReactNode; title: string; detail: string }) {
   return <div className="flex items-start gap-3 p-2"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#3a1e2b] text-[#ff6670]">{icon}</span><span><strong className="block text-sm text-white">{title}</strong><small className="mt-1 block text-xs text-slate-400">{detail}</small></span></div>;
+}
+
+function ModuleCard({ href, icon, title, detail }: { href: string; icon: React.ReactNode; title: string; detail: string }) {
+  return <a href={href} className="group flex items-center gap-4 rounded-2xl border border-slate-700 bg-[#111a2b] p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-[#ff6670] hover:bg-[#18243a]"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#3a1e2b] text-[#ff6670]">{icon}</span><span className="min-w-0 flex-1"><strong className="block text-sm font-extrabold text-white">{title}</strong><small className="mt-1 block text-xs text-slate-400">{detail}</small></span><ArrowRight size={17} className="shrink-0 text-slate-500 transition group-hover:translate-x-1 group-hover:text-[#ff6670]" /></a>;
 }

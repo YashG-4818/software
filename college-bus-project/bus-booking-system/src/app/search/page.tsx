@@ -22,17 +22,73 @@ function SearchResultsContent() {
   const buses = useMemo(() => {
     const filtered = BUS_FLEET.filter((bus) => bus.from.toLowerCase() === routeFrom.toLowerCase() && bus.to.toLowerCase() === routeTo.toLowerCase())
       .filter((bus) => filter === 'ALL' || (filter === 'AC' ? bus.type.toUpperCase().includes('AC') && !bus.type.toUpperCase().includes('NON-AC') : filter === 'NON-AC' ? bus.type.toUpperCase().includes('NON-AC') : bus.type.toUpperCase().includes(filter)));
-    return [...filtered].sort((a, b) => sort === 'price' ? a.price - b.price : sort === 'duration' ? a.duration.localeCompare(b.duration) : a.departure.localeCompare(b.departure));
+    return [...filtered].sort((a, b) => sort === 'price' ? a.price - b.price : sort === 'duration' ? durationInMinutes(a.duration) - durationInMinutes(b.duration) : a.departure.localeCompare(b.departure));
   }, [filter, routeFrom, routeTo, sort]);
 
   return <main className="min-h-screen bg-[#f7f8fa] text-[#172033]">
     <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8"><button type="button" onClick={() => router.push('/')} className="flex items-center gap-2 text-[#d9232e]"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#d9232e] text-white"><BusFront size={21} /></span><span className="text-xl font-extrabold text-slate-900">OmniBus</span></button><div className="flex items-center gap-5 text-sm font-bold text-slate-600"><a href="/track" className="hidden hover:text-[#d9232e] sm:block">Track ticket</a><a href="/login" className="hover:text-[#d9232e]">Login</a></div></div></header>
-    <section className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-5 py-5 md:flex-row md:items-center lg:px-8"><div><button type="button" onClick={() => router.push('/')} className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#d9232e]"><ArrowLeft size={14} /> Modify search</button><h1 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{routeFrom || 'Any city'} <ArrowRight size={19} className="text-[#d9232e]" /> {routeTo || 'Any city'}</h1><p className="mt-2 flex items-center gap-2 text-sm text-slate-500"><CalendarDays size={16} /> {date || 'Choose your travel date'} <span className="text-slate-300">•</span> {buses.length} buses found</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => setShowFilters((open) => !open)} className="btn-pill btn-secondary px-4 py-2.5 text-sm lg:hidden"><SlidersHorizontal size={16} /> Filters</button><label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600"><span className="hidden sm:inline">Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)} className="bg-transparent outline-none"><option value="departure">Departure</option><option value="price">Lowest fare</option><option value="duration">Shortest trip</option></select></label></div></div></section>
+    <section className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-5 py-5 md:flex-row md:items-center lg:px-8"><div><button type="button" onClick={() => router.push('/')} className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-[#d9232e]"><ArrowLeft size={14} /> Home</button><h1 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{routeFrom || 'Find your bus'} {routeFrom && <><ArrowRight size={19} className="text-[#d9232e]" /> {routeTo || 'Choose destination'}</>}</h1><p className="mt-2 flex items-center gap-2 text-sm text-slate-500"><CalendarDays size={16} /> {date || 'Choose your travel date'} <span className="text-slate-300">•</span> {routeFrom && routeTo ? `${buses.length} buses found` : 'Select a route below'}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => setShowFilters((open) => !open)} className="btn-pill btn-secondary px-4 py-2.5 text-sm lg:hidden"><SlidersHorizontal size={16} /> Filters</button><label className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600"><span className="hidden sm:inline">Sort by</span><select value={sort} onChange={(event) => setSort(event.target.value)} className="bg-transparent outline-none"><option value="departure">Departure</option><option value="price">Lowest fare</option><option value="duration">Shortest trip</option></select></label></div></div><div className="mx-auto max-w-7xl px-5 pb-5 lg:px-8"><RouteSearchForm key={`${routeFrom}|${routeTo}|${date}`} initialFrom={routeFrom} initialTo={routeTo} initialDate={date} onSearch={(from, to, travelDate) => router.push(`/search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&date=${travelDate}`)} /></div></section>
     <div className="mx-auto grid max-w-7xl gap-6 px-5 py-7 lg:grid-cols-[220px_1fr] lg:px-8">
       <aside className={`${showFilters ? 'block' : 'hidden'} lg:block`}><div className="rounded-2xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 font-extrabold"><Filter size={17} className="text-[#d9232e]" /> Filters</h2><button type="button" onClick={() => setFilter('ALL')} className="text-xs font-bold text-[#d9232e]">Reset</button></div><p className="mt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Bus type</p><div className="mt-3 space-y-2">{['ALL', 'AC', 'NON-AC', 'SLEEPER', 'ELECTRIC'].map((option) => <button type="button" key={option} onClick={() => setFilter(option)} className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-bold ${filter === option ? 'bg-red-50 text-[#d9232e]' : 'text-slate-600 hover:bg-slate-50'}`}><span>{option === 'ALL' ? 'All buses' : option === 'NON-AC' ? 'Non-AC buses' : `${option[0]}${option.slice(1).toLowerCase()} buses`}</span>{filter === option && <Check size={16} />}</button>)}</div><div className="mt-7 border-t border-slate-100 pt-5"><p className="text-xs font-bold uppercase tracking-wider text-slate-400">Book with confidence</p><p className="mt-2 text-sm leading-6 text-slate-500">Every bus shows its operator, amenities, fare, and live seat count before you choose.</p></div></div></aside>
-      <section className="min-w-0"><div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-500">{buses.length ? 'Recommended for your route' : 'No direct buses found'}</p><a href="mailto:support@omnibus.example" className="hidden items-center gap-1 text-xs font-bold text-[#d9232e] sm:flex"><Headphones size={14} /> Need help?</a></div>{buses.length ? <div className="space-y-4">{buses.map((bus, index) => <BusCard key={bus.vehicleId} bus={bus} featured={index === 0} onBook={() => router.push(`/book?vehicle=${bus.vehicleId}&available=${bus.seatsLeft}&date=${encodeURIComponent(date)}`)} />)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><BusFront size={42} className="mx-auto text-slate-300" /><h2 className="mt-4 text-lg font-extrabold">Try another route</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">There are no direct buses for this exact city pair yet. Modify your search or contact support for alternatives.</p><button type="button" onClick={() => router.push('/')} className="btn-pill btn-primary mt-6 px-5 py-3">Search another route</button></div>}<div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><Ticket size={19} className="mt-0.5 shrink-0 text-blue-600" /><p><strong>Transparent fares.</strong> The price shown includes the base seat fare. Taxes and platform charges are shown before payment.</p></div></section>
+      <section className="min-w-0"><div className="mb-4 flex items-center justify-between"><p className="text-sm font-bold text-slate-500">{buses.length ? 'Recommended for your route' : routeFrom && routeTo ? 'No direct buses found' : 'Choose a route to see available buses'}</p><a href="mailto:support@omnibus.example" className="hidden items-center gap-1 text-xs font-bold text-[#d9232e] sm:flex"><Headphones size={14} /> Need help?</a></div>{buses.length ? <div className="space-y-4">{buses.map((bus, index) => <BusCard key={bus.vehicleId} bus={bus} featured={index === 0} onBook={() => router.push(`/book?vehicle=${bus.vehicleId}&available=${bus.seatsLeft}&date=${encodeURIComponent(date)}`)} />)}</div> : <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-12 text-center"><BusFront size={42} className="mx-auto text-slate-300" /><h2 className="mt-4 text-lg font-extrabold">{routeFrom && routeTo ? 'Try another route' : 'Start by choosing your route'}</h2><p className="mx-auto mt-2 max-w-md text-sm text-slate-500">{routeFrom && routeTo ? 'There are no direct buses for this city pair yet. Use the route selector above to try another available route.' : 'Choose an origin, destination, and travel date above to see available buses.'}</p>{routeFrom && routeTo && <button type="button" onClick={() => router.push('/search')} className="btn-pill btn-primary mt-6 px-5 py-3">Choose another route</button>}</div>}<div className="mt-6 flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900"><Ticket size={19} className="mt-0.5 shrink-0 text-blue-600" /><p><strong>Transparent fares.</strong> The price shown includes the base seat fare. Taxes and platform charges are shown before payment.</p></div></section>
     </div>
   </main>;
+}
+
+function RouteSearchForm({
+  initialFrom,
+  initialTo,
+  initialDate,
+  onSearch,
+}: {
+  initialFrom: string;
+  initialTo: string;
+  initialDate: string;
+  onSearch: (from: string, to: string, date: string) => void;
+}) {
+  const today = new Date();
+  const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const [from, setFrom] = useState(initialFrom);
+  const [to, setTo] = useState(initialTo);
+  const [date, setDate] = useState(initialDate || localToday);
+  const origins = Array.from(new Set(BUS_FLEET.map((bus) => bus.from))).sort();
+  const destinations = Array.from(new Set(BUS_FLEET.filter((bus) => bus.from === from).map((bus) => bus.to))).sort();
+
+  return (
+    <form
+      className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (from && to && date) onSearch(from, to, date);
+      }}
+    >
+      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        From
+        <select required value={from} onChange={(event) => { setFrom(event.target.value); setTo(''); }} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-800">
+          <option value="">Choose origin</option>
+          {origins.map((city) => <option key={city} value={city}>{city}</option>)}
+        </select>
+      </label>
+      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        To
+        <select required value={to} onChange={(event) => setTo(event.target.value)} disabled={!from} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-800 disabled:bg-slate-100">
+          <option value="">Choose destination</option>
+          {destinations.map((city) => <option key={city} value={city}>{city}</option>)}
+        </select>
+      </label>
+      <label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+        Travel date
+        <input required type="date" min={localToday} value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold normal-case tracking-normal text-slate-800" />
+      </label>
+      <button type="submit" className="btn-pill btn-primary h-11 px-5 text-sm"><BusFront size={17} /> Search buses</button>
+    </form>
+  );
+}
+
+function durationInMinutes(duration: string) {
+  const hours = Number(duration.match(/(\d+)\s*h/i)?.[1] ?? 0);
+  const minutes = Number(duration.match(/(\d+)\s*m/i)?.[1] ?? 0);
+  return hours * 60 + minutes;
 }
 
 function BusCard({ bus, featured, onBook }: { bus: BusRecord; featured: boolean; onBook: () => void }) {

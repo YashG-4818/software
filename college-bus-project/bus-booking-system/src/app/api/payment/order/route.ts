@@ -8,6 +8,12 @@ const orderSchema = z.object({
   notes: z.record(z.string(), z.string()).optional(),
 });
 
+export function GET() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  return NextResponse.json({ configured: Boolean(keyId && keySecret), keyId: keyId ?? null });
+}
+
 export async function POST(request: Request) {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;

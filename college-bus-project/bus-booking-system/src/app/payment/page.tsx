@@ -5,16 +5,20 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
+  BadgeCheck,
   Building2,
   BusFront,
   Check,
   CreditCard,
+  LockKeyhole,
+  ShieldCheck,
   Smartphone,
   Tag,
-  Timer,
+  WalletCards,
 } from "lucide-react";
 
-type PaymentMethod = "UPI" | "CARD" | "NET_BANKING";
+type PaymentMethod = "UPI" | "CARD" | "NET_BANKING" | "WALLET";
+
 type BookingDraft = {
   vehicleId: string;
   registrationNumber: string;
@@ -37,24 +41,26 @@ type BookingDraft = {
 };
 
 const BANKS = [
-  "SBI",
+  "State Bank of India",
   "HDFC Bank",
   "ICICI Bank",
   "Axis Bank",
-  "Kotak Bank",
-  "PNB",
+  "Kotak Mahindra",
+  "Punjab National Bank",
+  "IDFC FIRST Bank",
+  "Bank of Baroda",
 ];
-const SESSION_SECONDS = 7 * 60;
-
 export default function PaymentPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<BookingDraft | null>(null);
   const [method, setMethod] = useState<PaymentMethod>("UPI");
+  const [selectedUpiApp, setSelectedUpiApp] = useState("Google Pay");
   const [selectedBank, setSelectedBank] = useState("");
+  const [selectedCardType, setSelectedCardType] = useState<"Credit card" | "Debit card">("Credit card");
+  const [selectedWallet, setSelectedWallet] = useState("Paytm");
   const [couponCode, setCouponCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [couponMessage, setCouponMessage] = useState("");
-  const [secondsLeft, setSecondsLeft] = useState(SESSION_SECONDS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -64,7 +70,6 @@ export default function PaymentPage() {
   const platformFee = selectedSeatCount * 15;
   const subtotal = baseFare + gst + platformFee;
   const totalAmount = Math.max(0, subtotal - discount);
-  const formattedTime = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
   const passengerName = draft?.passenger?.trim() || "Passenger";
 
   useEffect(() => {
@@ -80,14 +85,6 @@ export default function PaymentPage() {
       }
     }, 0);
     return () => window.clearTimeout(hydrationTimer);
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setInterval(
-      () => setSecondsLeft((value) => Math.max(0, value - 1)),
-      1000,
-    );
-    return () => window.clearInterval(timer);
   }, []);
 
   const applyCoupon = () => {
@@ -110,89 +107,93 @@ export default function PaymentPage() {
       setError("Your seat selection is missing. Return to seat selection.");
       return;
     }
-    if (secondsLeft === 0) {
-      setError("Your checkout session expired. Return to seat selection to start again.");
-      return;
-    }
     if (method === "NET_BANKING" && !selectedBank) {
       setError("Choose a bank to continue.");
       return;
     }
+    if (method === "WALLET" && !selectedWallet) {
+      setError("Choose a wallet to continue.");
+      return;
+    }
     setError("");
-    void completeDemoBooking();
+    void completeSandboxBooking();
   };
 
-  const completeDemoBooking = async () => {
+  const makePnr = () => `OMNI${Math.floor(100000 + Math.random() * 900000)}`;
+
+  const createBooking = async ({
+    pnr,
+    bookingReference,
+    paymentStatus,
+    paidWith,
+    paymentReference,
+  }: {
+    pnr: string;
+    bookingReference: string;
+    paymentStatus: string;
+    paidWith: string;
+    paymentReference?: string;
+  }) => {
     if (!draft?.selectedSeats.length) {
       setError("Your seat selection is missing.");
-      return;
+      throw new Error("Your seat selection is missing.");
     }
-    if (secondsLeft === 0) {
-      setError(
-        "Your checkout session expired. Return to seat selection to start again.",
-      );
-      return;
-    }
-    setError("");
+    const response = await fetch("/api/trip", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "BOOK",
+        vehicleId: draft.vehicleId,
+        registrationNumber: draft.registrationNumber,
+        from: draft.from,
+        to: draft.to,
+        operator: draft.bus,
+        busType: draft.busType,
+        scheduledDeparture: draft.scheduledDeparture,
+        scheduledArrival: draft.scheduledArrival,
+        stops: draft.tripStops,
+        passengers: draft.selectedSeats.map((seatNumber, index) => ({
+          name: index === 0 ? passengerName : `${passengerName} - Guest ${index + 1}`,
+          seatNumber,
+          pnr: index === 0 ? pnr : `${pnr}-${index + 1}`,
+        })),
+      }),
+    });
+    if (!response.ok) throw new Error("Unable to complete the booking.");
+    localStorage.setItem("latestBooking", JSON.stringify({
+      pnr,
+      bookingReference,
+      status: paymentStatus === "Payment successful" ? "CONFIRMED" : "PAYMENT_PENDING",
+      paymentStatus,
+      paymentReference,
+      vehicleId: draft.vehicleId,
+      registrationNumber: draft.registrationNumber,
+      route: `${draft.from} -> ${draft.to}`,
+      date: draft.date,
+      departure: draft.departure,
+      arrival: draft.arrival,
+      bus: draft.bus,
+      seats: draft.selectedSeats.join(", "),
+      passenger: passengerName,
+      amount: totalAmount,
+      paidWith,
+    }));
+    router.push("/ticket");
+  };
+
+  const completeSandboxBooking = async () => {
     setIsSubmitting(true);
-    const pnr = `OMNI${Math.floor(100000 + Math.random() * 900000)}`;
     try {
-      const response = await fetch("/api/trip", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "BOOK",
-          vehicleId: draft.vehicleId,
-          registrationNumber: draft.registrationNumber,
-          from: draft.from,
-          to: draft.to,
-          operator: draft.bus,
-          busType: draft.busType,
-          scheduledDeparture: draft.scheduledDeparture,
-          scheduledArrival: draft.scheduledArrival,
-          stops: draft.tripStops,
-          passengers: draft.selectedSeats.map((seatNumber, index) => ({
-            name:
-              index === 0
-                ? passengerName
-                : `${passengerName} - Guest ${index + 1}`,
-            seatNumber,
-            pnr: index === 0 ? pnr : `${pnr}-${index + 1}`,
-          })),
-        }),
+      const pnr = makePnr();
+      await createBooking({
+        pnr,
+        bookingReference: `ORD-${Date.now().toString(36).toUpperCase()}`,
+        paymentStatus: "Payment successful",
+        paidWith: method === "NET_BANKING" ? `Net banking (${selectedBank})` : method === "WALLET" ? selectedWallet : method === "CARD" ? selectedCardType : `UPI (${selectedUpiApp})`,
+        paymentReference: `LOCAL-${Date.now().toString(36).toUpperCase()}`,
       });
-      if (!response.ok) throw new Error("Unable to create this demo booking.");
-      const bookingReference = `DEMO-${Date.now().toString(36).toUpperCase()}`;
-      localStorage.setItem(
-        "latestBooking",
-        JSON.stringify({
-          pnr,
-          bookingReference,
-          status: "CONFIRMED",
-          paymentStatus: "DEMO BOOKING - NO CHARGE",
-          vehicleId: draft.vehicleId,
-          registrationNumber: draft.registrationNumber,
-          route: `${draft.from} -> ${draft.to}`,
-          date: draft.date,
-          departure: draft.departure,
-          arrival: draft.arrival,
-          bus: draft.bus,
-          seats: draft.selectedSeats.join(", "),
-          passenger: passengerName,
-          amount: totalAmount,
-          paidWith:
-            method === "NET_BANKING"
-              ? `Demo - Net banking (${selectedBank})`
-              : `Demo - ${method === "CARD" ? "Card" : "UPI"}`,
-        }),
-      );
-      router.push("/ticket");
     } catch (bookingError) {
-      setError(
-        bookingError instanceof Error
-          ? bookingError.message
-          : "Unable to create this demo booking.",
-      );
+      setError(bookingError instanceof Error ? bookingError.message : "Unable to complete the booking.");
       setIsSubmitting(false);
     }
   };
@@ -213,8 +214,7 @@ export default function PaymentPage() {
             </span>
           </button>
           <span className="flex items-center gap-2 text-sm font-semibold text-slate-400">
-            <Check size={16} className="text-emerald-400" /> Prototype
-            checkout
+            <LockKeyhole size={16} className="text-emerald-400" /> Booking checkout
           </span>
         </div>
       </header>
@@ -231,116 +231,97 @@ export default function PaymentPage() {
               Checkout
             </p>
             <h1 className="mt-2 text-3xl font-extrabold">
-              Complete your payment
+              Complete your booking
             </h1>
             <p className="mt-2 text-slate-400">
               Passenger: <strong className="text-white">{passengerName}</strong>
               . No need to enter it again.
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2.5 text-sm font-bold text-amber-200">
-            <Timer size={17} /> Session {formattedTime}
-          </div>
         </div>
         <div className="grid items-start gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#10182d] shadow-2xl">
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#10182d] shadow-xl shadow-black/10">
             <div className="border-b border-white/10 px-6 py-6 sm:px-8">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Step 1 of 1
-              </p>
-              <h2 className="mt-1 text-xl font-bold">
-                Choose a payment method
-              </h2>
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Payment</p>
+              <h2 className="mt-1 text-xl font-bold">Choose how you’d like to pay</h2>
             </div>
-            <div className="grid md:grid-cols-[190px_1fr]">
-              <nav className="border-b border-white/10 p-3 md:border-b-0 md:border-r">
-                <PaymentTab
-                  active={method === "UPI"}
-                  icon={<Smartphone size={19} />}
-                  label="UPI"
-                  detail="GPay, PhonePe, Paytm"
-                  onClick={() => setMethod("UPI")}
-                />
-                <PaymentTab
-                  active={method === "CARD"}
-                  icon={<CreditCard size={19} />}
-                  label="Cards"
-                  detail="Credit or debit card"
-                  onClick={() => setMethod("CARD")}
-                />
-                <PaymentTab
-                  active={method === "NET_BANKING"}
-                  icon={<Building2 size={19} />}
-                  label="Net banking"
-                  detail="Select your bank"
-                  onClick={() => setMethod("NET_BANKING")}
-                />
-              </nav>
-              <form onSubmit={submitCheckout} className="space-y-6 p-6 sm:p-8">
-                <div className="rounded-xl border border-white/10 bg-[#0b1225] px-4 py-3">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Passenger details
-                  </p>
-                  <p className="mt-1 font-bold text-white">{passengerName}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Collected once during seat selection.
-                  </p>
+            <form onSubmit={submitCheckout} className="space-y-6 p-5 sm:p-8">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <PaymentTab active={method === "UPI"} icon={<Smartphone size={19} />} label="UPI" detail="Apps & UPI" onClick={() => setMethod("UPI")} />
+                <PaymentTab active={method === "CARD"} icon={<CreditCard size={19} />} label="Cards" detail="Credit & debit" onClick={() => setMethod("CARD")} />
+                <PaymentTab active={method === "NET_BANKING"} icon={<Building2 size={19} />} label="Net banking" detail="All major banks" onClick={() => setMethod("NET_BANKING")} />
+                <PaymentTab active={method === "WALLET"} icon={<WalletCards size={19} />} label="Wallets" detail="Popular wallets" onClick={() => setMethod("WALLET")} />
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-[#0b1225] px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/5 text-slate-300"><BadgeCheck size={19} /></span>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Passenger</p>
+                    <p className="mt-1 font-bold text-white">{passengerName}</p>
+                  </div>
+                  <p className="ml-auto hidden text-xs text-slate-500 sm:block">Contact details added at booking</p>
                 </div>
-                {method === "UPI" && (
-                  <div>
-                    <p className="text-lg font-bold">Pay with UPI</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Simulated UPI checkout. No payment or personal details are collected.
-                    </p>
+              </div>
+              {method === "UPI" && (
+                <div>
+                  <div className="flex flex-wrap items-end justify-between gap-2">
+                    <div><h3 className="text-lg font-bold">Pay using UPI</h3><p className="mt-1 text-sm text-slate-400">Choose an app for this booking.</p></div>
+                    <div className="flex gap-1.5 text-[10px] font-extrabold text-slate-400"><span className="rounded border border-white/10 px-2 py-1">UPI</span><span className="rounded border border-white/10 px-2 py-1">BHIM</span></div>
                   </div>
-                )}
-                {method === "CARD" && (
-                  <div>
-                    <p className="text-lg font-bold">Card details</p>
-                    <p className="mt-1 text-sm text-slate-400">
-                      Simulated card checkout. No card number or security code is needed.
-                    </p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {["Google Pay", "PhonePe", "Paytm", "BHIM"].map((app) => <ChoiceCard key={app} selected={selectedUpiApp === app} onClick={() => setSelectedUpiApp(app)} title={app} detail="UPI app" />)}
                   </div>
-                )}
-                {method === "NET_BANKING" && (
-                  <div className="space-y-4">
-                    <p className="text-lg font-bold">Choose your bank</p>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {BANKS.map((bank) => (
-                        <button
-                          type="button"
-                          key={bank}
-                          onClick={() => setSelectedBank(bank)}
-                          className={`rounded-xl border p-3 text-left text-sm font-bold ${selectedBank === bank ? "border-red-400 bg-red-500/15 text-red-300" : "border-white/10 bg-[#0b1225] text-slate-300"}`}
-                        >
-                          {selectedBank === bank && (
-                            <Check size={15} className="mb-1" />
-                          )}
-                          {bank}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-sm text-slate-400">
-                      Bank selection is simulated. No sign-in or OTP is required.
-                    </p>
+                  <div className="mt-5 flex flex-col items-center gap-3 rounded-2xl border border-white/10 bg-[#0b1225] p-5 text-center sm:flex-row sm:text-left">
+                    <DummyUpiQr />
+                    <div><p className="font-bold text-white">Sample UPI QR</p><p className="mt-1 text-sm text-slate-400">This code is decorative and cannot collect money. Continue to confirm your booking locally.</p></div>
                   </div>
-                )}
-                {error && (
-                  <p className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-300">
-                    {error}
-                  </p>
-                )}
-                <button
-                  disabled={isSubmitting || secondsLeft === 0}
-                  className="btn-pill btn-primary w-full py-4 text-base disabled:opacity-60"
-                >
-                  {isSubmitting ? "Creating demo booking..." : "Complete demo booking"}{" "}
-                  <ArrowRight size={19} />
-                </button>
-              </form>
-            </div>
+                </div>
+              )}
+              {method === "CARD" && (
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div><h3 className="text-lg font-bold">Credit or debit card</h3><p className="mt-1 text-sm text-slate-400">Card information is entered in secure checkout.</p></div>
+                    <div className="flex gap-1.5 text-[10px] font-extrabold text-slate-400"><span className="rounded border border-white/10 px-2 py-1">VISA</span><span className="rounded border border-white/10 px-2 py-1">mastercard</span><span className="rounded border border-white/10 px-2 py-1">RuPay</span></div>
+                  </div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    {(["Credit card", "Debit card"] as const).map((type) => <ChoiceCard key={type} selected={selectedCardType === type} onClick={() => setSelectedCardType(type)} title={type} detail="Visa · Mastercard · RuPay" />)}
+                  </div>
+                </div>
+              )}
+              {method === "NET_BANKING" && (
+                <div className="space-y-4">
+                  <div><h3 className="text-lg font-bold">Choose your bank</h3><p className="mt-1 text-sm text-slate-400">You’ll be redirected to your bank to authorize payment.</p></div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {BANKS.map((bank) => <ChoiceCard key={bank} selected={selectedBank === bank} onClick={() => setSelectedBank(bank)} title={bank} detail="Net banking" />)}
+                  </div>
+                </div>
+              )}
+              {method === "WALLET" && (
+                <div className="space-y-4">
+                  <div><h3 className="text-lg font-bold">Choose a wallet</h3><p className="mt-1 text-sm text-slate-400">Continue to authorize with your selected wallet.</p></div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {["Paytm", "Amazon Pay", "PhonePe", "Mobikwik", "Freecharge", "Airtel Payments Bank"].map((wallet) => <ChoiceCard key={wallet} selected={selectedWallet === wallet} onClick={() => setSelectedWallet(wallet)} title={wallet} detail="Digital wallet" />)}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-white/10 bg-[#0b1225]/70 px-4 py-3 text-xs text-slate-400">
+                <span className="inline-flex items-center gap-2 font-semibold text-slate-300"><ShieldCheck size={15} className="text-emerald-400" /> No real payment is processed</span>
+                <span className="mt-1 block">Confirming records a local booking only. No money will be charged.</span>
+              </div>
+              {error && (
+                <p role="alert" className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-300">{error}</p>
+              )}
+              <button
+                disabled={isSubmitting || !draft?.selectedSeats.length}
+                className="btn-pill btn-primary w-full py-4 text-base disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Check size={17} />
+                {isSubmitting ? "Confirming booking..." : "Confirm booking"}
+                <ArrowRight size={19} />
+              </button>
+            </form>
           </section>
-          <aside className="rounded-3xl border border-white/10 bg-[#10182d] p-6 shadow-2xl lg:sticky lg:top-6">
+          <aside className="rounded-3xl border border-white/10 bg-[#10182d] p-6 shadow-xl shadow-black/10 lg:sticky lg:top-6">
             <p className="text-xs font-bold uppercase tracking-wider text-slate-500">
               Order summary
             </p>
@@ -376,9 +357,10 @@ export default function PaymentPage() {
               )}
             </div>
             <div className="mt-6 space-y-3 text-sm">
-              <Fare label="Base fare" amount={baseFare} />
+              <Fare label={`Base fare · ${selectedSeatCount} seat${selectedSeatCount === 1 ? "" : "s"}`} amount={baseFare} />
               <Fare label="GST" amount={gst} />
-              <Fare label="Platform fee" amount={platformFee} />
+              <Fare label="Convenience fee" amount={platformFee} />
+              {discount > 0 && <Fare label="Discount" amount={-discount} />}
               <div className="flex justify-between border-t border-white/10 pt-3 text-lg font-extrabold">
                 <span>Total</span>
                 <span>₹{totalAmount.toLocaleString("en-IN")}</span>
@@ -408,24 +390,67 @@ function PaymentTab({
     <button
       type="button"
       onClick={onClick}
-      className={`mb-2 flex w-full items-center gap-3 rounded-2xl p-3 text-left ${active ? "bg-red-500/15 text-red-300 ring-1 ring-red-400/50" : "text-slate-400 hover:bg-white/5"}`}
+      aria-pressed={active}
+      className={`flex min-h-[92px] flex-col items-start justify-between gap-3 rounded-2xl border p-3 text-left transition ${active ? "border-red-400/70 bg-red-500/10 text-red-300 shadow-sm shadow-red-950/20" : "border-white/10 bg-[#0b1225] text-slate-300 hover:border-white/20 hover:bg-white/[0.04]"}`}
     >
-      <span className="rounded-xl bg-white/10 p-2">{icon}</span>
-      <span>
+      <span className="flex w-full items-center justify-between"><span className={`rounded-xl p-2 ${active ? "bg-red-400/10" : "bg-white/5"}`}>{icon}</span>{active && <Check size={16} className="text-red-300" />}</span>
+      <span className="block">
         <strong className="block text-sm">{label}</strong>
-        <small className="block text-[11px] text-slate-500">{detail}</small>
-        <small className="block text-[10px] font-semibold text-amber-300">
-          Demo only - no charge
-        </small>
+        <small className="mt-0.5 block text-[11px] text-slate-500">{detail}</small>
       </span>
     </button>
   );
 }
+
+function ChoiceCard({ selected, title, detail, onClick }: { selected: boolean; title: string; detail: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex min-h-16 items-center gap-3 rounded-xl border px-3 py-3 text-left transition ${selected ? "border-red-400/70 bg-red-500/10 ring-1 ring-red-400/30" : "border-white/10 bg-[#0b1225] hover:border-white/25"}`}
+    >
+      <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? "bg-red-400/10 text-red-300" : "bg-white/5 text-slate-400"}`}>{selected ? <Check size={16} /> : <span className="h-2 w-2 rounded-full bg-slate-500" />}</span>
+      <span className="min-w-0"><strong className="block truncate text-sm font-bold text-slate-100">{title}</strong><small className="mt-0.5 block truncate text-[11px] text-slate-500">{detail}</small></span>
+    </button>
+  );
+}
+
 function Fare({ label, amount }: { label: string; amount: number }) {
   return (
     <div className="flex justify-between text-slate-400">
       <span>{label}</span>
-      <span>₹{amount.toLocaleString("en-IN")}</span>
+      <span className={amount < 0 ? "text-emerald-400" : ""}>{amount < 0 ? "-₹" : "₹"}{Math.abs(amount).toLocaleString("en-IN")}</span>
     </div>
+  );
+}
+
+function DummyUpiQr() {
+  const finders: [number, number][] = [[0, 0], [14, 0], [0, 14]];
+  const modules = Array.from({ length: 21 * 21 }, (_, index) => {
+    const x = index % 21;
+    const y = Math.floor(index / 21);
+    const finder = finders.find(([left, top]) => x >= left && x < left + 7 && y >= top && y < top + 7);
+    if (finder) {
+      const dx = x - finder[0];
+      const dy = y - finder[1];
+      return dx === 0 || dx === 6 || dy === 0 || dy === 6 || (dx >= 2 && dx <= 4 && dy >= 2 && dy <= 4);
+    }
+    return (x * 17 + y * 23 + x * y * 3) % 7 < 3;
+  });
+
+  return (
+    <svg
+      role="img"
+      aria-label="Decorative UPI QR sample. Not scannable."
+      viewBox="0 0 25 25"
+      className="h-36 w-36 shrink-0 rounded-xl bg-white p-2"
+      shapeRendering="crispEdges"
+    >
+      <rect width="25" height="25" fill="white" />
+      {modules.map((isDark, index) => isDark ? (
+        <rect key={index} x={index % 21 + 2} y={Math.floor(index / 21) + 2} width="1" height="1" fill="#111827" />
+      ) : null)}
+    </svg>
   );
 }

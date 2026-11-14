@@ -2,8 +2,9 @@
 
 import dynamic from 'next/dynamic';
 import React, { useEffect, useRef, useState } from 'react';
-import { Bell, BusFront, MapPin, Clock, CheckCircle2, Search, ArrowLeft, X } from 'lucide-react';
+import { Bell, BusFront, MapPin, Clock, CheckCircle2, Search, ArrowLeft, X, Play, RotateCcw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { initialMockUsers, mockRoute } from '@/data/mockData';
 
 const LiveMap = dynamic(() => import('@/components/Map'), {
   ssr: false,
@@ -31,10 +32,30 @@ export default function TrackingPage() {
   const [tripEvents, setTripEvents] = useState<{ id: number; type: string; message: string; createdAt: string }[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [lastSeenEventId, setLastSeenEventId] = useState(0);
+  const [demoUserId, setDemoUserId] = useState(initialMockUsers[0].id);
+  const [demoUserName, setDemoUserName] = useState(initialMockUsers[0].name);
+  const [demoRouteIndex, setDemoRouteIndex] = useState(initialMockUsers[0].routeIndex);
+  const [isDemoRunning, setIsDemoRunning] = useState(false);
+  const [demoResetKey, setDemoResetKey] = useState(0);
   const previousTripStatus = useRef('');
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
+      const requestedUserId = new URLSearchParams(window.location.search).get('demoUser');
+      const requestedUser = initialMockUsers.find((user) => user.id === requestedUserId);
+      if (requestedUser) {
+        setDemoUserId(requestedUser.id);
+        setDemoUserName(requestedUser.name);
+        setDemoRouteIndex(requestedUser.routeIndex);
+        setIsDemoRunning(true);
+      } else if (requestedUserId) {
+        const requestedName = new URLSearchParams(window.location.search).get('demoName');
+        const requestedIndex = Number(new URLSearchParams(window.location.search).get('demoRouteIndex'));
+        setDemoUserId(requestedUserId);
+        setDemoUserName(requestedName || 'Demo user');
+        setDemoRouteIndex(Number.isInteger(requestedIndex) && requestedIndex >= 0 && requestedIndex < mockRoute.length ? requestedIndex : 0);
+        setIsDemoRunning(true);
+      }
       const savedBooking = localStorage.getItem('latestBooking');
       if (savedBooking) {
         const booking = JSON.parse(savedBooking);
@@ -141,6 +162,47 @@ export default function TrackingPage() {
         <div className="mt-4 space-y-2">{tripEvents.length ? tripEvents.slice(0, 8).map((event) => <div key={`${event.id}-${event.type}-${event.createdAt}`} className="rounded-xl border border-slate-100 bg-slate-50 p-3"><p className="text-sm font-semibold text-slate-800">{event.message}</p><p className="mt-1 text-xs text-slate-500">{new Date(event.createdAt).toLocaleTimeString()}</p></div>) : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-500">No trip updates yet. Notifications will appear when the driver starts, moves, delays, or completes the trip.</p>}</div>
       </section>}
 
+      <section className="max-w-7xl mx-auto mb-6 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Frontend-only preview</p>
+          <h2 className="mt-1 text-lg font-extrabold text-slate-900">Delhi live route</h2>
+          <p className="mt-1 text-sm text-slate-500">Follow a trip from Connaught Place to North Campus.</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="sr-only" htmlFor="demo-user">Choose a demo user</label>
+          <select
+            id="demo-user"
+            value={demoUserId}
+            onChange={(event) => {
+              const selectedUser = initialMockUsers.find((user) => user.id === event.target.value);
+              if (!selectedUser) return;
+              setDemoUserId(selectedUser.id);
+              setDemoUserName(selectedUser.name);
+              setDemoRouteIndex(selectedUser.routeIndex);
+              setDemoResetKey((key) => key + 1);
+            }}
+            className="h-11 min-w-52 rounded-xl border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800 outline-none focus:border-blue-500"
+          >
+            {!initialMockUsers.some((user) => user.id === demoUserId) && <option value={demoUserId}>{demoUserName} · {demoUserId}</option>}
+            {initialMockUsers.map((user) => <option key={user.id} value={user.id}>{user.name} · {user.id}</option>)}
+          </select>
+          <button
+            type="button"
+            onClick={() => {
+              if (isDemoRunning) {
+                setIsDemoRunning(false);
+                setDemoResetKey((key) => key + 1);
+              } else {
+                setIsDemoRunning(true);
+              }
+            }}
+            className="btn-pill btn-primary min-h-11 whitespace-nowrap px-5 py-3 text-sm"
+          >
+            {isDemoRunning ? <><RotateCcw size={16} /> Reset Route</> : <><Play size={16} /> Start Live Trip</>}
+          </button>
+        </div>
+      </section>
+
       <div className="max-w-7xl mx-auto mb-6 bg-white border border-slate-200 p-5 shadow-sm">
         <form onSubmit={checkBooking} className="flex flex-col gap-3 sm:flex-row">
           <div className="relative flex-1"><Search size={18} className="absolute left-3 top-3 text-slate-400" /><input value={pnr} onChange={(event) => setPnr(event.target.value)} placeholder="Enter your PNR to check booking status" className="w-full border border-slate-300 bg-slate-50 py-3 pl-10 pr-4 font-mono uppercase outline-none focus:border-[#d9232e]" /></div>
@@ -153,8 +215,8 @@ export default function TrackingPage() {
 
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 h-[75vh]">
         <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-200 p-2 h-full relative">
-          {tripStatus === 'RUNNING' || tripStatus === 'DELAYED' ? (
-            <LiveMap vehicleId={vehicleId} />
+          {tripStatus === 'RUNNING' || tripStatus === 'DELAYED' || isDemoRunning ? (
+            <LiveMap key={`${demoUserId}-${demoRouteIndex}-${demoResetKey}`} vehicleId={vehicleId} demoMode={isDemoRunning} demoUserId={demoUserId} demoUserName={demoUserName} demoRouteIndex={demoRouteIndex} />
           ) : (
             <div className="flex h-full flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 text-center text-slate-500">
               <BusFront size={54} className="mb-4 text-slate-300" />

@@ -117,7 +117,7 @@ export default function LoginPage({ mode = 'login' }: { mode?: 'login' | 'regist
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-sm font-semibold text-slate-600">Password</label>
-                {isLogin && <a href="#" className="text-xs text-blue-600 font-bold hover:underline">Forgot?</a>}
+                {isLogin && <Link href="/support" className="text-xs text-blue-600 font-bold hover:underline">Need help?</Link>}
               </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 text-slate-400" size={20} />

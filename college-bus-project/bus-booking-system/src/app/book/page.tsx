@@ -1,7 +1,7 @@
 "use client";
 
 import React, { Suspense, useMemo, useState } from 'react';
-import { Armchair, Info, Lock, ArrowRight, MapPin, BusFront, CalendarDays } from 'lucide-react';
+import { Armchair, Info, ArrowRight, MapPin, BusFront, CalendarDays } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BUS_FLEET } from '@/lib/bus-data';
 
@@ -60,7 +60,6 @@ function BookingPageContent() {
   const travelDate = searchParams.get('date') ?? '';
   const seatLayout = useMemo(() => buildSeatLayout(availableSeatCount, selectedBus.price), [availableSeatCount, selectedBus.price]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
-  const [isLocking, setIsLocking] = useState(false);
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [passengers, setPassengers] = useState<Record<string, PassengerDetail>>({});
@@ -90,7 +89,7 @@ function BookingPageContent() {
     const seat = seatLayout.find((item) => item.id === seatId);
     return sum + (seat?.price || 500);
   }, 0);
-  const addOnTotal = (freeCancellation ? 110 : 0) + (tripGuarantee ? 24 : 0) + (travelInsurance ? 15 : 0);
+  const addOnTotal = selectedSeats.length * ((freeCancellation ? 110 : 0) + (tripGuarantee ? 24 : 0) + (travelInsurance ? 15 : 0));
 
   const handleProceedToPayment = () => {
     if (!selectedBus || selectedSeats.length === 0) {
@@ -102,15 +101,19 @@ function BookingPageContent() {
       return;
     }
 
+    const journeyDate = travelDate || formatLocalDate(new Date());
+    const scheduledDeparture = new Date(`${journeyDate}T${selectedBus.departure}:00+05:30`);
+    const scheduledArrival = new Date(`${journeyDate}T${selectedBus.arrival}:00+05:30`);
+    if (scheduledArrival <= scheduledDeparture) scheduledArrival.setDate(scheduledArrival.getDate() + 1);
     const draft = {
       vehicleId: selectedBus.vehicleId,
       registrationNumber: selectedBus.registrationNumber,
       route: `${selectedBus.from} -> ${selectedBus.to}`,
       from: selectedBus.from,
       to: selectedBus.to,
-      date: travelDate || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      departure: `${selectedBus.departure} AM`,
-      arrival: `${selectedBus.arrival} AM`,
+      date: journeyDate,
+      departure: formatTripClock(scheduledDeparture),
+      arrival: formatTripClock(scheduledArrival),
       bus: selectedBus.operator,
       busType: selectedBus.type,
       seatCount: selectedSeats.length,
@@ -124,15 +127,12 @@ function BookingPageContent() {
       passengers: selectedSeats.map((seat) => ({ seatNumber: seat, ...passengers[seat] })),
       addOns: { freeCancellation, tripGuarantee, travelInsurance },
       tripStops: selectedBus.route.map((stop) => stop.name),
-      scheduledDeparture: `2026-09-03T${selectedBus.departure}:00+05:30`,
-      scheduledArrival: `2026-09-03T${selectedBus.arrival}:00+05:30`,
+      scheduledDeparture: scheduledDeparture.toISOString(),
+      scheduledArrival: scheduledArrival.toISOString(),
     };
 
     localStorage.setItem('bookingDraft', JSON.stringify(draft));
-    setIsLocking(true);
-    setTimeout(() => {
-      router.push('/payment');
-    }, 1500);
+    router.push('/payment');
   };
 
   return (
@@ -228,15 +228,14 @@ function BookingPageContent() {
 
               <div className="flex items-start gap-2 bg-red-50 p-3 text-xs text-red-800">
                 <Info size={16} className="mt-0.5 shrink-0" />
-                <p>Seats will be <strong>temporarily locked for 5 minutes</strong> upon proceeding.</p>
+                <p>Your selected seats and passenger details will be carried to checkout.</p>
               </div>
 
               <p className="text-xs text-slate-500">{addOnTotal ? `Protection add-ons: ₹${addOnTotal}` : 'Taxes and platform charges are shown in the next step.'}</p><button 
                 onClick={handleProceedToPayment}
-                disabled={isLocking}
-                className="btn-pill btn-primary mt-2 w-full py-3.5 disabled:cursor-not-allowed disabled:opacity-70"
+                className="btn-pill btn-primary mt-2 w-full py-3.5"
               >
-                {isLocking ? <><Lock size={18} className="animate-pulse" /> Locking...</> : <>Proceed to Payment <ArrowRight size={18} /></>}
+                Continue to payment <ArrowRight size={18} />
               </button>
             </div>
           )}
@@ -269,6 +268,14 @@ function SeatButton({ seat, isSelected, onClick }: { seat: SeatType; isSelected:
 
 function AddOn({ title, detail, price, checked, onChange }: { title: string; detail: string; price: string; checked: boolean; onChange: (value: boolean) => void }) {
   return <label className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border p-4 transition ${checked ? 'border-[#d9232e] bg-red-50' : 'border-slate-200 bg-white hover:border-slate-400'}`}><span><strong className="block text-sm text-slate-900">{title}</strong><span className="mt-1 block text-xs text-slate-500">{detail}</span><span className="mt-2 block text-xs font-bold text-emerald-700">{price}</span></span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-5 w-5 accent-[#d9232e]" /></label>;
+}
+
+function formatLocalDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function formatTripClock(date: Date) {
+  return date.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' });
 }
 
 function BookingPageFallback() {
